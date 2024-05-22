@@ -1,6 +1,6 @@
 {
   "name": "myyshop-web-track",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "前端埋点插件",
   "main": "index.js",
   "type": "module",
