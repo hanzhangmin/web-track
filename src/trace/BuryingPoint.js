@@ -1,4 +1,4 @@
-import { objectMerge, param2Obj } from './utils'
+import { objectMerge, param2Obj, queryUrlParams } from './utils'
 import Cookies from 'js-cookie'
 let g__randomString = null // 全局的pvid的定义是：sdk加载时（pageview事件）（在发送日志之前）生成一个随机id，由数字和大小写字母组成
 class BuryingPoint {
@@ -13,8 +13,12 @@ class BuryingPoint {
     this.resource = options.resource || '' // 来源id
     this.title = options.title || '' // 标题
     this.event_body = options.event_body // 事件body
+    this.other = options.other // 用于上报特殊参数
     this.callback = options.callback || null // 回调
     this.domain = options.domain || location.hostname // 当前domian
+    this.userIdCacheKey = options.userIdCacheKey || 'd1_userid' // 当前站点用户ID缓存key
+    this.keywordKey = options.keywordQueryKey || 'searchKey' // 当前站点搜索结果页url query key
+    this.cateName = options.cateName || 'cateDisName' // 当前站点搜索结果页url query key
     // 处理时间维度
     this.SESSION_EXPIRE_TIME = options.sessionExpireTime || 30 * 60 * 1000 // 会话最大有效时间
     this.VISIT_TIME = new Date().getTime() // 当前访问时间
@@ -88,6 +92,7 @@ class BuryingPoint {
         event_data: {
           event_entity_info: {
             link_type: 'click',
+            item_code: options.itemcode,
           },
         },
       },
@@ -101,13 +106,18 @@ class BuryingPoint {
   pageview(options = {}) {
     // 页面曝光前重新定义pvid
     g__randomString = this.randomString()
+    // 搜索结果页搜索关键词
+    const keyword = options.keyword || queryUrlParams(this.keywordKey) || queryUrlParams(this.cateName) || ''
     // 设置请求报文
     this.event_body = objectMerge(
       {
         event_type: 'web_pageview',
         event_name: 'pageview',
         event_data: {
-          event_entity_info: {},
+          event_entity_info: {
+            item_code: options.itemcode,
+            keyword,
+          },
         },
       },
       options.event_body || {}
@@ -122,9 +132,8 @@ class BuryingPoint {
     }
   }
   // 随机数
-  randomString() {
+  randomString(string_length = 20) {
     var chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXTZabcdefghiklmnopqrstuvwxyz'
-    var string_length = 20
     var randomstring = ''
     for (var i = 0; i < string_length; i++) {
       var rnum = Math.floor(Math.random() * chars.length)
@@ -171,10 +180,11 @@ class BuryingPoint {
       lang = spmA.slice(-2) || ''
       site = spmA.slice(0, spmA.length - 2) || 'www'
     }
+
     var srcStr = {
       user_info: {
         vid: Cookies.get('vid') || '',
-        user_id: Cookies.get('b2b_buyerid') || window.localStorage.getItem('d1_userid') || '',
+        user_id: Cookies.get(this.userIdCacheKey) || window.localStorage.getItem(this.userIdCacheKey) || '',
         session_id: Cookies.get('d1_session') || Cookies.get('session') || '',
       },
       device: {
@@ -226,7 +236,7 @@ class BuryingPoint {
     var url = location.href
     var paraObj = param2Obj(url)
     // 排除key=wedding+dresses#aa中#aa 把‘+’去掉
-    var returnValue = paraObj[key.toLowerCase()]
+    var returnValue = paraObj[key]
     if (typeof returnValue === 'undefined') {
       return ''
     } else {
@@ -246,6 +256,7 @@ class BuryingPoint {
       _this.setSclk()
     }
     _this.event_body.event_time = new Date().getTime() || ''
+    _this.event_body.event_code = _this.event_code || ''
     _this.event_body.source = {
       f: Cookies.get('ref_f') || '',
       url: location.href || '',
@@ -281,7 +292,9 @@ class BuryingPoint {
       // a标签或有href属性则处理href或itemcode
       var itemcode = (this.event_body.event_data.event_entity_info.item_code || '').toString()
       var moduleEl =
-        _this.module.tagName === 'A' ? _this.module : _this.module.getElementsByTagName('a')[0] || _this.module
+        _this.module.tagName === 'A'
+          ? _this.module
+          : _this.module.getElementsByTagName('a')[0] || _this.module.closest('a') || _this.module
       var href = moduleEl.getAttribute('href') || ''
       if (!itemcode) {
         itemcode =
@@ -298,6 +311,7 @@ class BuryingPoint {
         spm_link:
           _this.spm_a + '.' + _this.spm_b + '.' + _this.moduleName + '.' + _this.moduleIndex + '.' + g__randomString,
         link_type: type || moduleEl.getAttribute('link-type') || 'item',
+        other: _this.other || {},
       })
     }
   }

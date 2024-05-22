@@ -1,5 +1,4 @@
 import Cookies from 'js-cookie'
-
 /**
  * @param {string} object
  * @returns {Boolean}
@@ -37,7 +36,13 @@ export function objectMerge(target, source) {
  * @returns {Array}
  */
 export function cleanArray(actual) {
-  return actual.filter((val) => val)
+  const newArray = []
+  for (let i = 0; i < actual.length; i++) {
+    if (actual[i]) {
+      newArray.push(actual[i])
+    }
+  }
+  return newArray
 }
 
 /**
@@ -58,7 +63,7 @@ export function param(json) {
  * @param {string} url
  * @returns {Object}
  */
-export function param2Obj(url = '') {
+export function param2Obj(url) {
   const search = decodeURIComponent(url.split('?')[1]).replace(/\+/g, ' ')
   if (!search) {
     return {}
@@ -75,16 +80,26 @@ export function param2Obj(url = '') {
   })
   return obj
 }
+/**
+ * 查询url上的参数
+ * @param {string} name
+ * @returns {String}
+ */
+export function queryUrlParams(name) {
+  const urlParams = new URLSearchParams(location.search)
+  return urlParams.get(name) || ''
+}
 
 /**
  * @param {string} path
  * @returns {Boolean}
  */
-export function isExternal(path = '') {
+export function isExternal(path) {
   return /^(https?:|mailto:|tel:)/.test(path)
 }
 
 /**
+ * 获取站点ID
  * @returns {String}
  */
 export function getMetaSpmA() {
@@ -92,10 +107,27 @@ export function getMetaSpmA() {
 }
 
 /**
+ * 获取页面ID
  * @returns {String}
  */
 export function getSpmb() {
   return document.head.querySelector('[name="spm-b"]')?.content || ''
+}
+
+/**
+ * 获取是否自动上报pv
+ * @returns {Boolean}
+ */
+export function getMetaAutotrack() {
+  return document.head.querySelector('[name="autotrack"]')?.content === 'true' || false
+}
+
+/**
+ * 获取页面级别的itemcode
+ * @returns {Boolean}
+ */
+export function getMetaItemcode() {
+  return document.head.querySelector('[name="itemcode"]')?.content || ''
 }
 
 /**
@@ -110,6 +142,6 @@ export const getLocale = () => {
  * @descriptin 是否客户端
  * @returns {Boolean}
  */
-export function isClient() {
+export const isClient = () => {
   return typeof window !== 'undefined'
 }

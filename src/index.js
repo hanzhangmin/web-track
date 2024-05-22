@@ -1,69 +1,77 @@
-import BuryingPoint from './trace/BuryingPoint'
-import { getAttribute } from './trace/dom'
-import { getSpmb, isClient } from './trace/utils'
+import BuryingPoint from './BuryingPoint'
+import { spmBaseUrl } from './config'
+import { getAttribute } from './dom'
+import { getMetaSpmA, getSpmb, isClient, getMetaAutotrack, getMetaItemcode } from './utils'
 
-function checkOptions({ baseUrl = [], spma = '' }) {
-  if (baseUrl && baseUrl.length === 0) {
-    throw new Error('baseUrl is required')
+// 处理应用初始化传递的optios参数
+const mergeInitOptionsHandler = (options = {}) => {
+  const baseUrl = options?.baseUrl || spmBaseUrl // 上报地址
+  const spm_a = options?.spm_a || getMetaSpmA() // 站点ID
+  const spm_b = options?.spm_b || getSpmb() // 页面ID
+  const userIdCacheKey = options?.userIdCacheKey // 站点用户ID缓存key
+  const autotrack = options?.autotrack || getMetaAutotrack() || false // 是否自动上报pv
+  return {
+    baseUrl,
+    spm_a,
+    spm_b,
+    userIdCacheKey,
+    autotrack,
   }
-  if (spma === '') {
-    throw new Error('spma is required')
-  }
-  return true
 }
 
-// pv埋点
-export function pageView({ baseUrl = [], spma = '' }) {
-  if (!checkOptions({ baseUrl, spma })) {
-    return false
-  }
+// 暴露pageview事件
+export const pageView = ({ eventCode, other, itemcode, options = {} }) => {
   if (!isClient()) {
     return false
   }
-  let spmb = getSpmb()
-  const locale = getLocale()
-  if (spmb === '') {
-    throw new Error('spmb is required')
-  }
+  // 处理传参
+  const mergeOptions = mergeInitOptionsHandler(options)
+  const { baseUrl, spm_a, spm_b, userIdCacheKey } = mergeOptions
+  const _itemcode = itemcode || getMetaItemcode()
   new BuryingPoint({
+    baseUrl,
+    spm_a,
     module: 'page',
-    baseUrl,
-    spm_a: `${spma}${locale}`,
-    spm_b: spmb,
-  }).pageview()
-}
-
-// 点击埋点
-export function clickTrack({ baseUrl = [], spma = '', spmc = '', spmd = '', module = document.body }) {
-  if (!checkOptions({ baseUrl, spma })) {
-    return false
-  }
-  let spmb = getSpmb()
-  const locale = getLocale()
-  new BuryingPoint({
-    baseUrl,
-    module: module, // element dom
-    spm_a: `${spma}${locale}`,
-    spm_b: spmb,
-    moduleName: spmc, // spm_c
-  }).click({
-    moduleIndex: spmd,
+    spm_b,
+    event_code: eventCode,
+    other,
+    userIdCacheKey,
+  }).pageview({
+    itemcode: _itemcode,
   })
 }
 
-// 曝光埋点
-export function exposeTrack({ baseUrl = [], spma = '', spmc = '', spmd = '', module = document.body }) {
-  if (!checkOptions({ baseUrl, spma })) {
-    return false
-  }
-  let spmb = getSpmb()
-  const locale = getLocale()
+// 暴露click事件
+export const traceClick = ({ spmc, spmd, module = document.body, eventCode, other, options, itemcode }) => {
+  // 处理传参
+  const mergeOptions = mergeInitOptionsHandler(options)
+  const { baseUrl, spm_a, spm_b, userIdCacheKey } = mergeOptions
   new BuryingPoint({
     baseUrl,
-    module: module, // element dom
-    spm_a: `${spma}${locale}`,
-    spm_b: spmb,
+    spm_a,
+    module, // element dom
+    spm_b,
     moduleName: spmc, // spm_c
+    other,
+    userIdCacheKey,
+  }).click({
+    moduleIndex: spmd,
+    itemcode,
+  })
+}
+// 暴露expose事件
+export const traceExpose = ({ spmc, spmd, module = document.body, eventCode, other, options }) => {
+  // 处理传参
+  const mergeOptions = mergeInitOptionsHandler(options)
+  const { baseUrl, spm_a, spm_b, userIdCacheKey } = mergeOptions
+  new BuryingPoint({
+    baseUrl,
+    spm_a,
+    module, // element dom
+    spm_b,
+    moduleName: spmc, // spm_c
+    other,
+    userIdCacheKey,
   }).expose({
     moduleIndex: spmd,
   })
@@ -72,40 +80,104 @@ export function exposeTrack({ baseUrl = [], spma = '', spmc = '', spmd = '', mod
 /**
  * @description 点击事件埋点
  */
-function listenerTraceClickHandler(event) {
+export const listenerTraceClickHandler = (event, options) => {
   // 获取埋点元素信息
   const target = event.target
   const spmc = getAttribute(event, 'spm-c')
+  const eventCode = getAttribute(event, 'event-code')
+  const other = getAttribute(event, 'other')
   if (spmc) {
     const spmIndex = getAttribute(event, 'spm-index') || '1'
-    this.click({
+    const itemcode = getAttribute(event, 'itemcode') || ''
+    traceClick({
       spmc,
       spmd: spmIndex,
       module: target,
+      other,
+      options,
+      itemcode,
     })
   }
+}
+/**
+ * history事件绑定
+ */
+const bindHistoryEventListener = (type) => {
+  const historyEvent = window.history[type]
+  return function () {
+    const newEvent = historyEvent.apply(this, arguments)
+    const e = new Event(type)
+    e.arguments = arguments
+    window.dispatchEvent(e)
+    return newEvent
+  }
+}
+
+/**
+ * 页面堆变化
+ */
+const onPageChange = (event, options) => {
+  pageView({ options })
 }
 
 /**
  * @description 自动埋点元素
  */
 export function autoTrack(attr) {
-  if (!checkOptions(attr)) {
-    return false
-  }
   if (!isClient()) {
     return false
   }
-  pageView(attr)
-  window.addEventListener('click', listenerTraceClickHandler, false)
-  // 网页关闭之前取消监听
+  // 处理传参
+  const mergeOptions = mergeInitOptionsHandler(options)
+
+  // 自动pv监听
+  if (mergeOptions.autotrack) {
+    pageView({
+      options: mergeOptions,
+    })
+    // 针对vue react等单页应用路由重新绑定History相关事件
+    window.history.pushState = bindHistoryEventListener('pushState')
+    window.history.replaceState = bindHistoryEventListener('replaceState')
+    window.addEventListener(
+      'popstate',
+      function (e) {
+        onPageChange(e, mergeOptions)
+      },
+      false
+    )
+    window.addEventListener(
+      'pushState',
+      function (e) {
+        onPageChange(e, mergeOptions)
+      },
+      false
+    )
+    window.addEventListener(
+      'replaceState',
+      function (e) {
+        onPageChange(e, mergeOptions)
+      },
+      false
+    )
+  }
+
+  // 点击事件监听
+  window.addEventListener(
+    'click',
+    function (e) {
+      listenerTraceClickHandler(e, mergeOptions)
+    },
+    false
+  )
+  // 曝光自动监听
   let observer = null
+  const MutationObserver = window.MutationObserver || window.WebKitMutationObserver
+
+  // 网页关闭之前取消监听
   window.addEventListener('beforeunload', function (e) {
     if (observer) observer.disconnect()
   })
 
-  // 曝光自动监听
-  const MutationObserver = window.MutationObserver || window.WebKitMutationObserver
   // 监听dom变化
   function checkDomReady() {
     // 检查指定节点是否有匹配
@@ -120,10 +192,13 @@ export function autoTrack(attr) {
           // 对节点调用曝光监听
           const spmc = element.getAttribute('spm-c') || ''
           const spmd = element.getAttribute('spm-index') || '1'
+          const other = element.getAttribute('other') || {}
           traceExpose({
             spmc,
             spmd,
             module: element,
+            other,
+            options: mergeOptions,
           })
         }
       }
