@@ -1,8 +1,8 @@
 {
   "name": "myyshop-web-track",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "前端埋点插件",
-  "main": "index.js",
+  "main": "index.mjs",
   "type": "module",
   "scripts": {
     "build": "rollup --config",
@@ -11,6 +11,19 @@
   "keywords": [
     "toolkit",
     "rollup"
+  ],
+  "exports": {
+    ".": {
+      "import": {
+        "default": "./dist/index.mjs"
+      },
+      "default": {
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "files": [
+    "dist"
   ],
   "author": "",
   "license": "MIT",
