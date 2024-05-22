@@ -7,7 +7,7 @@ export default {
   output: {
     // 打包出口
     file: 'dist/index.js',
-    format: 'umd', // umd是兼容amd/cjs/iife的通用打包格式，适合浏览器
+    format: 'es', // 打包成es模块
     name: 'myyshop-web-track', // cdn方式引入时挂载在window上面用的就是这个名字
     sourcemap: true,
   },
