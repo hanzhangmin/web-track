@@ -123,7 +123,7 @@ const onPageChange = (event, options) => {
 /**
  * @description 自动埋点元素
  */
-export function autoTrack(attr) {
+export function autoTrack(options) {
   if (!isClient()) {
     return false
   }
