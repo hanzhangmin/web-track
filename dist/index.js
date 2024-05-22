@@ -197,8 +197,7 @@
    * @param {string} url
    * @returns {Object}
    */
-  function param2Obj() {
-    var url = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : '';
+  function param2Obj(url) {
     var search = decodeURIComponent(url.split('?')[1]).replace(/\+/g, ' ');
     if (!search) {
       return {};
@@ -215,8 +214,27 @@
     });
     return obj;
   }
+  /**
+   * 查询url上的参数
+   * @param {string} name
+   * @returns {String}
+   */
+  function queryUrlParams(name) {
+    var urlParams = new URLSearchParams(location.search);
+    return urlParams.get(name) || '';
+  }
 
   /**
+   * 获取站点ID
+   * @returns {String}
+   */
+  function getMetaSpmA() {
+    var _document$head$queryS;
+    return ((_document$head$queryS = document.head.querySelector('[name="spm-a"]')) === null || _document$head$queryS === void 0 ? void 0 : _document$head$queryS.content) || '';
+  }
+
+  /**
+   * 获取页面ID
    * @returns {String}
    */
   function getSpmb() {
@@ -225,12 +243,30 @@
   }
 
   /**
+   * 获取是否自动上报pv
+   * @returns {Boolean}
+   */
+  function getMetaAutotrack() {
+    var _document$head$queryS3;
+    return ((_document$head$queryS3 = document.head.querySelector('[name="autotrack"]')) === null || _document$head$queryS3 === void 0 ? void 0 : _document$head$queryS3.content) === 'true' || false;
+  }
+
+  /**
+   * 获取页面级别的itemcode
+   * @returns {Boolean}
+   */
+  function getMetaItemcode() {
+    var _document$head$queryS4;
+    return ((_document$head$queryS4 = document.head.querySelector('[name="itemcode"]')) === null || _document$head$queryS4 === void 0 ? void 0 : _document$head$queryS4.content) || '';
+  }
+
+  /**
    * @descriptin 是否客户端
    * @returns {Boolean}
    */
-  function isClient() {
+  var isClient = function isClient() {
     return typeof window !== 'undefined';
-  }
+  };
 
   var g__randomString = null; // 全局的pvid的定义是：sdk加载时（pageview事件）（在发送日志之前）生成一个随机id，由数字和大小写字母组成
   var BuryingPoint = /*#__PURE__*/function () {
@@ -247,8 +283,12 @@
       this.resource = options.resource || ''; // 来源id
       this.title = options.title || ''; // 标题
       this.event_body = options.event_body; // 事件body
+      this.other = options.other; // 用于上报特殊参数
       this.callback = options.callback || null; // 回调
       this.domain = options.domain || location.hostname; // 当前domian
+      this.userIdCacheKey = options.userIdCacheKey || 'd1_userid'; // 当前站点用户ID缓存key
+      this.keywordKey = options.keywordQueryKey || 'searchKey'; // 当前站点搜索结果页url query key
+      this.cateName = options.cateName || 'cateDisName'; // 当前站点搜索结果页url query key
       // 处理时间维度
       this.SESSION_EXPIRE_TIME = options.sessionExpireTime || 30 * 60 * 1000; // 会话最大有效时间
       this.VISIT_TIME = new Date().getTime(); // 当前访问时间
@@ -326,7 +366,8 @@
           event_name: 'click',
           event_data: {
             event_entity_info: {
-              link_type: 'click'
+              link_type: 'click',
+              item_code: options.itemcode
             }
           }
         }, options.event_body || {});
@@ -341,12 +382,17 @@
         var options = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
         // 页面曝光前重新定义pvid
         g__randomString = this.randomString();
+        // 搜索结果页搜索关键词
+        var keyword = options.keyword || queryUrlParams(this.keywordKey) || queryUrlParams(this.cateName) || '';
         // 设置请求报文
         this.event_body = objectMerge({
           event_type: 'web_pageview',
           event_name: 'pageview',
           event_data: {
-            event_entity_info: {}
+            event_entity_info: {
+              item_code: options.itemcode,
+              keyword: keyword
+            }
           }
         }, options.event_body || {});
         this.setRequestVo();
@@ -366,8 +412,8 @@
     }, {
       key: "randomString",
       value: function randomString() {
+        var string_length = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : 20;
         var chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXTZabcdefghiklmnopqrstuvwxyz';
-        var string_length = 20;
         var randomstring = '';
         for (var i = 0; i < string_length; i++) {
           var rnum = Math.floor(Math.random() * chars.length);
@@ -432,7 +478,7 @@
         var srcStr = {
           user_info: {
             vid: api.get('vid') || '',
-            user_id: api.get('b2b_buyerid') || window.localStorage.getItem('d1_userid') || '',
+            user_id: api.get(this.userIdCacheKey) || window.localStorage.getItem(this.userIdCacheKey) || '',
             session_id: api.get('d1_session') || api.get('session') || ''
           },
           device: {
@@ -492,7 +538,7 @@
         var url = location.href;
         var paraObj = param2Obj(url);
         // 排除key=wedding+dresses#aa中#aa 把‘+’去掉
-        var returnValue = paraObj[key.toLowerCase()];
+        var returnValue = paraObj[key];
         if (typeof returnValue === 'undefined') {
           return '';
         } else {
@@ -514,6 +560,7 @@
           _this.setSclk();
         }
         _this.event_body.event_time = new Date().getTime() || '';
+        _this.event_body.event_code = _this.event_code || '';
         _this.event_body.source = {
           f: api.get('ref_f') || '',
           url: location.href || '',
@@ -548,7 +595,7 @@
           }
           // a标签或有href属性则处理href或itemcode
           var itemcode = (this.event_body.event_data.event_entity_info.item_code || '').toString();
-          var moduleEl = _this.module.tagName === 'A' ? _this.module : _this.module.getElementsByTagName('a')[0] || _this.module;
+          var moduleEl = _this.module.tagName === 'A' ? _this.module : _this.module.getElementsByTagName('a')[0] || _this.module.closest('a') || _this.module;
           var href = moduleEl.getAttribute('href') || '';
           if (!itemcode) {
             itemcode = link_type === 'item' ? moduleEl.getAttribute('itemcode') || moduleEl.getAttribute('resource') || '' : '';
@@ -562,7 +609,8 @@
             resource_id: _this.resource || moduleEl.getAttribute('resource') || '',
             item_code: itemcode,
             spm_link: _this.spm_a + '.' + _this.spm_b + '.' + _this.moduleName + '.' + _this.moduleIndex + '.' + g__randomString,
-            link_type: type || moduleEl.getAttribute('link-type') || 'item'
+            link_type: type || moduleEl.getAttribute('link-type') || 'item',
+            other: _this.other || {}
           });
         }
       }
@@ -672,6 +720,9 @@
     }]);
   }();
 
+  // 埋点上报地址，支持多写
+  var spmBaseUrl = ['https://d1.dhmogo.com/track/tracklog.jsp'];
+
   /**
    *
    * @param {事件event} event
@@ -696,141 +747,201 @@
     return res;
   };
 
-  function checkOptions(_ref) {
-    var _ref$baseUrl = _ref.baseUrl,
-      baseUrl = _ref$baseUrl === void 0 ? [] : _ref$baseUrl,
-      _ref$spma = _ref.spma,
-      spma = _ref$spma === void 0 ? '' : _ref$spma;
-    if (baseUrl && baseUrl.length === 0) {
-      throw new Error('baseUrl is required');
-    }
-    if (spma === '') {
-      throw new Error('spma is required');
-    }
-    return true;
-  }
-
-  // pv埋点
-  function pageView(_ref2) {
-    var _ref2$baseUrl = _ref2.baseUrl,
-      baseUrl = _ref2$baseUrl === void 0 ? [] : _ref2$baseUrl,
-      _ref2$spma = _ref2.spma,
-      spma = _ref2$spma === void 0 ? '' : _ref2$spma;
-    if (!checkOptions({
+  // 处理应用初始化传递的optios参数
+  var mergeInitOptionsHandler = function mergeInitOptionsHandler() {
+    var options = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
+    var baseUrl = (options === null || options === void 0 ? void 0 : options.baseUrl) || spmBaseUrl; // 上报地址
+    var spm_a = (options === null || options === void 0 ? void 0 : options.spm_a) || getMetaSpmA(); // 站点ID
+    var spm_b = (options === null || options === void 0 ? void 0 : options.spm_b) || getSpmb(); // 页面ID
+    var userIdCacheKey = options === null || options === void 0 ? void 0 : options.userIdCacheKey; // 站点用户ID缓存key
+    var autotrack = (options === null || options === void 0 ? void 0 : options.autotrack) || getMetaAutotrack() || false; // 是否自动上报pv
+    return {
       baseUrl: baseUrl,
-      spma: spma
-    })) ;
+      spm_a: spm_a,
+      spm_b: spm_b,
+      userIdCacheKey: userIdCacheKey,
+      autotrack: autotrack
+    };
+  };
+
+  // 暴露pageview事件
+  var pageView = function pageView(_ref) {
+    var eventCode = _ref.eventCode,
+      other = _ref.other,
+      itemcode = _ref.itemcode,
+      _ref$options = _ref.options,
+      options = _ref$options === void 0 ? {} : _ref$options;
     if (!isClient()) {
       return false;
     }
-    var spmb = getSpmb();
-    var locale = getLocale();
-    if (spmb === '') {
-      throw new Error('spmb is required');
-    }
+    // 处理传参
+    var mergeOptions = mergeInitOptionsHandler(options);
+    var baseUrl = mergeOptions.baseUrl,
+      spm_a = mergeOptions.spm_a,
+      spm_b = mergeOptions.spm_b,
+      userIdCacheKey = mergeOptions.userIdCacheKey;
+    var _itemcode = itemcode || getMetaItemcode();
     new BuryingPoint({
-      module: 'page',
       baseUrl: baseUrl,
-      spm_a: "".concat(spma).concat(locale),
-      spm_b: spmb
-    }).pageview();
-  }
+      spm_a: spm_a,
+      module: 'page',
+      spm_b: spm_b,
+      event_code: eventCode,
+      other: other,
+      userIdCacheKey: userIdCacheKey
+    }).pageview({
+      itemcode: _itemcode
+    });
+  };
 
-  // 点击埋点
-  function clickTrack(_ref3) {
-    var _ref3$baseUrl = _ref3.baseUrl,
-      baseUrl = _ref3$baseUrl === void 0 ? [] : _ref3$baseUrl,
-      _ref3$spma = _ref3.spma,
-      spma = _ref3$spma === void 0 ? '' : _ref3$spma,
-      _ref3$spmc = _ref3.spmc,
-      spmc = _ref3$spmc === void 0 ? '' : _ref3$spmc,
-      _ref3$spmd = _ref3.spmd,
-      spmd = _ref3$spmd === void 0 ? '' : _ref3$spmd,
+  // 暴露click事件
+  var traceClick = function traceClick(_ref2) {
+    var spmc = _ref2.spmc,
+      spmd = _ref2.spmd,
+      _ref2$module = _ref2.module,
+      module = _ref2$module === void 0 ? document.body : _ref2$module;
+      _ref2.eventCode;
+      var other = _ref2.other,
+      options = _ref2.options,
+      itemcode = _ref2.itemcode;
+    // 处理传参
+    var mergeOptions = mergeInitOptionsHandler(options);
+    var baseUrl = mergeOptions.baseUrl,
+      spm_a = mergeOptions.spm_a,
+      spm_b = mergeOptions.spm_b,
+      userIdCacheKey = mergeOptions.userIdCacheKey;
+    new BuryingPoint({
+      baseUrl: baseUrl,
+      spm_a: spm_a,
+      module: module,
+      // element dom
+      spm_b: spm_b,
+      moduleName: spmc,
+      // spm_c
+      other: other,
+      userIdCacheKey: userIdCacheKey
+    }).click({
+      moduleIndex: spmd,
+      itemcode: itemcode
+    });
+  };
+  // 暴露expose事件
+  var traceExpose = function traceExpose(_ref3) {
+    var spmc = _ref3.spmc,
+      spmd = _ref3.spmd,
       _ref3$module = _ref3.module,
       module = _ref3$module === void 0 ? document.body : _ref3$module;
-    if (!checkOptions({
-      baseUrl: baseUrl,
-      spma: spma
-    })) ;
-    var spmb = getSpmb();
-    var locale = getLocale();
+      _ref3.eventCode;
+      var other = _ref3.other,
+      options = _ref3.options;
+    // 处理传参
+    var mergeOptions = mergeInitOptionsHandler(options);
+    var baseUrl = mergeOptions.baseUrl,
+      spm_a = mergeOptions.spm_a,
+      spm_b = mergeOptions.spm_b,
+      userIdCacheKey = mergeOptions.userIdCacheKey;
     new BuryingPoint({
       baseUrl: baseUrl,
+      spm_a: spm_a,
       module: module,
       // element dom
-      spm_a: "".concat(spma).concat(locale),
-      spm_b: spmb,
-      moduleName: spmc // spm_c
-    }).click({
-      moduleIndex: spmd
-    });
-  }
-
-  // 曝光埋点
-  function exposeTrack(_ref4) {
-    var _ref4$baseUrl = _ref4.baseUrl,
-      baseUrl = _ref4$baseUrl === void 0 ? [] : _ref4$baseUrl,
-      _ref4$spma = _ref4.spma,
-      spma = _ref4$spma === void 0 ? '' : _ref4$spma,
-      _ref4$spmc = _ref4.spmc,
-      spmc = _ref4$spmc === void 0 ? '' : _ref4$spmc,
-      _ref4$spmd = _ref4.spmd,
-      spmd = _ref4$spmd === void 0 ? '' : _ref4$spmd,
-      _ref4$module = _ref4.module,
-      module = _ref4$module === void 0 ? document.body : _ref4$module;
-    if (!checkOptions({
-      baseUrl: baseUrl,
-      spma: spma
-    })) ;
-    var spmb = getSpmb();
-    var locale = getLocale();
-    new BuryingPoint({
-      baseUrl: baseUrl,
-      module: module,
-      // element dom
-      spm_a: "".concat(spma).concat(locale),
-      spm_b: spmb,
-      moduleName: spmc // spm_c
+      spm_b: spm_b,
+      moduleName: spmc,
+      // spm_c
+      other: other,
+      userIdCacheKey: userIdCacheKey
     }).expose({
       moduleIndex: spmd
     });
-  }
+  };
 
   /**
    * @description 点击事件埋点
    */
-  function listenerTraceClickHandler(event) {
+  var listenerTraceClickHandler = function listenerTraceClickHandler(event, options) {
     // 获取埋点元素信息
     var target = event.target;
     var spmc = getAttribute(event, 'spm-c');
+    getAttribute(event, 'event-code');
+    var other = getAttribute(event, 'other');
     if (spmc) {
       var spmIndex = getAttribute(event, 'spm-index') || '1';
-      this.click({
+      var itemcode = getAttribute(event, 'itemcode') || '';
+      traceClick({
         spmc: spmc,
         spmd: spmIndex,
-        module: target
+        module: target,
+        other: other,
+        options: options,
+        itemcode: itemcode
       });
     }
-  }
+  };
+  /**
+   * history事件绑定
+   */
+  var bindHistoryEventListener = function bindHistoryEventListener(type) {
+    var historyEvent = window.history[type];
+    return function () {
+      var newEvent = historyEvent.apply(this, arguments);
+      var e = new Event(type);
+      e.arguments = arguments;
+      window.dispatchEvent(e);
+      return newEvent;
+    };
+  };
+
+  /**
+   * 页面堆变化
+   */
+  var onPageChange = function onPageChange(event, options) {
+    pageView({
+      options: options
+    });
+  };
 
   /**
    * @description 自动埋点元素
    */
   function autoTrack(attr) {
-    if (!checkOptions(attr)) ;
     if (!isClient()) {
       return false;
     }
-    pageView(attr);
-    window.addEventListener('click', listenerTraceClickHandler, false);
-    // 网页关闭之前取消监听
+    // 处理传参
+    var mergeOptions = mergeInitOptionsHandler(options);
+
+    // 自动pv监听
+    if (mergeOptions.autotrack) {
+      pageView({
+        options: mergeOptions
+      });
+      // 针对vue react等单页应用路由重新绑定History相关事件
+      window.history.pushState = bindHistoryEventListener('pushState');
+      window.history.replaceState = bindHistoryEventListener('replaceState');
+      window.addEventListener('popstate', function (e) {
+        onPageChange(e, mergeOptions);
+      }, false);
+      window.addEventListener('pushState', function (e) {
+        onPageChange(e, mergeOptions);
+      }, false);
+      window.addEventListener('replaceState', function (e) {
+        onPageChange(e, mergeOptions);
+      }, false);
+    }
+
+    // 点击事件监听
+    window.addEventListener('click', function (e) {
+      listenerTraceClickHandler(e, mergeOptions);
+    }, false);
+    // 曝光自动监听
     var observer = null;
+    var MutationObserver = window.MutationObserver || window.WebKitMutationObserver;
+
+    // 网页关闭之前取消监听
     window.addEventListener('beforeunload', function (e) {
       if (observer) observer.disconnect();
     });
 
-    // 曝光自动监听
-    var MutationObserver = window.MutationObserver || window.WebKitMutationObserver;
     // 监听dom变化
     function checkDomReady() {
       // 检查指定节点是否有匹配
@@ -847,10 +958,13 @@
             // 对节点调用曝光监听
             var spmc = element.getAttribute('spm-c') || '';
             var spmd = element.getAttribute('spm-index') || '1';
+            var other = element.getAttribute('other') || {};
             traceExpose({
               spmc: spmc,
               spmd: spmd,
-              module: element
+              module: element,
+              other: other,
+              options: mergeOptions
             });
           }
         }
@@ -873,9 +987,10 @@
   }
 
   exports.autoTrack = autoTrack;
-  exports.clickTrack = clickTrack;
-  exports.exposeTrack = exposeTrack;
+  exports.listenerTraceClickHandler = listenerTraceClickHandler;
   exports.pageView = pageView;
+  exports.traceClick = traceClick;
+  exports.traceExpose = traceExpose;
 
 }));
 //# sourceMappingURL=index.js.map

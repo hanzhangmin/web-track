@@ -1,7 +1,7 @@
-import BuryingPoint from './BuryingPoint'
-import { spmBaseUrl } from './config'
-import { getAttribute } from './dom'
-import { getMetaSpmA, getSpmb, isClient, getMetaAutotrack, getMetaItemcode } from './utils'
+import BuryingPoint from './trace/BuryingPoint'
+import { spmBaseUrl } from './trace/config'
+import { getAttribute } from './trace/dom'
+import { getMetaSpmA, getSpmb, isClient, getMetaAutotrack, getMetaItemcode } from './trace/utils'
 
 // 处理应用初始化传递的optios参数
 const mergeInitOptionsHandler = (options = {}) => {
